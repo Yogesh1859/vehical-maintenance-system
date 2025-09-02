@@ -1,5 +1,6 @@
-Flask>=2.3
+gFlask>=2.3
 gunicorn>=20.1
 pytz
 python-dateutil
 python-json-logger
+flask-cors

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Vehicle Service Tracker</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f9; }
+    h2 { margin-top: 30px; }
+    form { margin-bottom: 20px; }
+    input, button, select { margin: 5px; padding: 8px; }
+    #dashboard { margin-top: 20px; }
+    .vehicle-card {
+      border: 1px solid #ccc; padding: 10px; margin: 10px;
+      border-radius: 8px; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .notification { padding: 10px; margin: 5px 0; border-radius: 5px; }
+    .notif-ok { background: #d4edda; }
+    .notif-soon { background: #fff3cd; }
+    .notif-overdue { background: #f8d7da; }
+  </style>
+</head>
+<body>
+  <h1>🚗 Vehicle Service Tracker</h1>
+
+  <!-- Registration -->
+  <h2>Register</h2>
+  <form id="registerForm">
+    <input type="text" id="regUsername" placeholder="Username" required>
+    <input type="email" id="regEmail" placeholder="Email" required>
+    <input type="password" id="regPassword" placeholder="Password" required>
+    <button type="submit">Register</button>
+  </form>
+
+  <!-- Login -->
+  <h2>Login</h2>
+  <form id="loginForm">
+    <input type="text" id="loginUsername" placeholder="Username" required>
+    <input type="password" id="loginPassword" placeholder="Password" required>
+    <button type="submit">Login</button>
+  </form>
+
+  <!-- Dashboard -->
+  <div id="dashboard" style="display:none;">
+    <h2>Dashboard</h2>
+    <p id="welcomeMsg"></p>
+    <button onclick="logout()">Logout</button>
+
+    <h3>Add Vehicle</h3>
+    <form id="vehicleForm">
+      <input type="text" id="vehicleName" placeholder="Vehicle Name" required>
+      <input type="text" id="vehicleModel" placeholder="Model/Year" required>
+      <input type="text" id="vehicleReg" placeholder="Registration Number" required>
+      <button type="submit">Add Vehicle</button>
+    </form>
+
+    <div id="vehicles"></div>
+
+    <h3>Notifications</h3>
+    <div id="notificationPanel"></div>
+  </div>
+
+  <script>
+    const api = "http://127.0.0.1:5000";
+    let userId = null;
+    let userEmail = null;
+
+    // Registration
+    document.getElementById("registerForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      const username = regUsername.value, email = regEmail.value, password = regPassword.value;
+      const res = await fetch(api + "/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, email, password })
+      });
+      const data = await res.json();
+      alert(data.message || "Registered!");
+    });
+
+    // Login
+    document.getElementById("loginForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      const username = loginUsername.value, password = loginPassword.value;
+      const res = await fetch(api + "/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.success) {
+        userId = data.user_id;
+        userEmail = data.email;
+        dashboard.style.display = "block";
+        welcomeMsg.innerText = "Welcome, " + username + " (" + userEmail + ")";
+        loadVehicles();
+        loadNotifications();
+      } else {
+        alert(data.message);
+      }
+    });
+
+    // Logout
+    function logout() {
+      userId = null;
+      userEmail = null;
+      dashboard.style.display = "none";
+      alert("Logged out!");
+    }
+
+    // Add Vehicle
+    document.getElementById("vehicleForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      const name = vehicleName.value, model = vehicleModel.value, reg_number = vehicleReg.value;
+      const res = await fetch(api + "/add_vehicle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, name, model, reg_number })
+      });
+      const data = await res.json();
+      alert(data.message);
+      loadVehicles();
+    });
+
+    // Load Vehicles
+    async function loadVehicles() {
+      const res = await fetch(api + "/get_vehicles/" + userId);
+      const vehicles = await res.json();
+      const container = document.getElementById("vehicles");
+      container.innerHTML = "";
+      vehicles.forEach(v => {
+        const card = document.createElement("div");
+        card.className = "vehicle-card";
+        card.innerHTML = `<h4>${v.name} (${v.model}) - ${v.reg_number}</h4>
+          <form onsubmit="addService(event, ${v.id})">
+            <select id="serviceType${v.id}" required>
+              <option value="">Select Service</option>
+              <option value="wash">Wash</option>
+              <option value="oil">Oil Change</option>
+              <option value="regular">Regular Service</option>
+            </select>
+            <input type="date" id="serviceDate${v.id}" required>
+            <button type="submit">Add Service</button>
+          </form>
+          <div id="services${v.id}"></div>`;
+        container.appendChild(card);
+        loadServices(v.id);
+      });
+    }
+
+    // Add Service
+    async function addService(e, vehicleId) {
+      e.preventDefault();
+      const service_type = document.getElementById("serviceType" + vehicleId).value;
+      const service_date = document.getElementById("serviceDate" + vehicleId).value;
+      const res = await fetch(api + "/add_service", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vehicle_id: vehicleId, service_type, service_date, user_email: userEmail })
+      });
+      const data = await res.json();
+      alert(data.message);
+      loadServices(vehicleId);
+      loadNotifications();
+    }
+
+    // Load Services
+    async function loadServices(vehicleId) {
+      const res = await fetch(api + "/get_services/" + vehicleId);
+      const services = await res.json();
+      const container = document.getElementById("services" + vehicleId);
+      container.innerHTML = "";
+      services.forEach(s => {
+        container.innerHTML += `<p>${s.service_type.toUpperCase()} on ${s.service_date} → Next: ${s.next_due_date} [${s.status}]</p>`;
+      });
+    }
+
+    // Notifications
+    async function loadNotifications() {
+      const res = await fetch(api + "/get_vehicles/" + userId);
+      const vehicles = await res.json();
+      const panel = document.getElementById("notificationPanel");
+      panel.innerHTML = "";
+      for (let v of vehicles) {
+        const res2 = await fetch(api + "/get_services/" + v.id);
+        const services = await res2.json();
+        services.forEach(s => {
+          let notifClass = s.status === "ok" ? "notif-ok" :
+                           s.status === "due soon" ? "notif-soon" : "notif-overdue";
+          panel.innerHTML += `<div class="notification ${notifClass}">
+            ${v.name} (${v.reg_number}) - ${s.service_type.toUpperCase()} due on ${s.next_due_date} [${s.status}]
+          </div>`;
+
+          // 🚨 Popup alert if overdue
+          if (s.status === "overdue") {
+            alert(`⚠️ ALERT: ${v.name} (${v.reg_number}) is OVERDUE for ${s.service_type.toUpperCase()}!`);
+          }
+        });
+      }
+    }
+  </script>
+</body>
+</html>
